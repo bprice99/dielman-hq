@@ -82,7 +82,7 @@ const db = {
 };
 const K = {
   sess: 'dm:sess', key: 'dm:scriptKey', secret: 'dm:secret', rec: 'dm:rec', optout: 'dm:optout', settings: 'dm:settings',
-  camps: 'dm:camps', out: 'dm:out', jlog: 'dm:jlog', sync: 'dm:sync', mailday: 'dm:mailday',
+  paired: 'dm:paired', camps: 'dm:camps', out: 'dm:out', jlog: 'dm:jlog', sync: 'dm:sync', mailday: 'dm:mailday',
 };
 const crKey = id => 'dm:cr:' + id;   // one text campaign's recipients + status
 async function rand(key) { let v = await db.get(key, ''); if (!v) { v = crypto.randomBytes(18).toString('hex'); await db.set(key, v); } return v; }
@@ -436,7 +436,7 @@ app.get('/api/state', async (req, res) => {
       audiences: AUDIENCES.map(a => ({ id: a.id, name: a.name, ...counts[a.id] })), templates: TEMPLATES, campaigns: camps,
       steps: await stepsWithSettings(), settings: { reviewLink: st.reviewLink || '', testPhone: st.testPhone || '', testEmail: st.testEmail || '' },
       status: { gmailLast: sync.at || 0, gmailTotal: P.recs, people: P.list.length, customers: counts.all.total, repeat: counts.repeat.total,
-        textsReady: !!(CFG.TM_USER && CFG.TM_KEY), emailQueue: out.filter(o => o.st === 'q').length, optouts: oo.size },
+        textsReady: !!(CFG.TM_USER && CFG.TM_KEY), gmailPaired: !!(await db.get(K.paired, false)), baseOk: !!process.env.PUBLIC_BASE_URL, emailQueue: out.filter(o => o.st === 'q').length, optouts: oo.size },
       textPrice: TEXT_PRICE, emailPerDay: EMAIL_PER_DAY,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -451,7 +451,7 @@ app.get('/api/people', async (req, res) => {
 });
 
 // ===================== GMAIL SCRIPT ENDPOINTS =====================
-async function keyOk(k) { return !!k && sameStr(k, await rand(K.key)); }
+async function keyOk(k) { const real = await db.get(K.key, ''); return !!k && !!real && sameStr(k, real); }
 app.post('/public/dielman/ingest', async (req, res) => {
   try {
     const b = req.body || {}; if (!(await keyOk(b.key))) return res.status(403).json({ error: 'bad key' });
@@ -494,6 +494,21 @@ app.post('/public/dielman/sent', async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Gmail script pairing: the script carries no key. On its first run it asks HQ for one (only once, only as
+// info@dielmanmoving.com) and keeps it in the script's own storage. Setup → "Reset Gmail connection" allows a new pairing.
+app.post('/public/dielman/pair', async (req, res) => {
+  try {
+    if (await db.get(K.paired, false)) return res.status(409).json({ error: 'Already connected. Use Reset Gmail connection in Dielman HQ Setup first.' });
+    if (normEmail((req.body || {}).email) !== BIZ.email) return res.status(403).json({ error: 'Run this from ' + BIZ.email });
+    const k = crypto.randomBytes(18).toString('hex');
+    await db.set(K.key, k); await db.set(K.paired, { at: Date.now() });
+    res.json({ ok: true, key: k });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/gmail/reset', async (req, res) => {
+  try { await db.set(K.key, crypto.randomBytes(18).toString('hex')); await db.set(K.paired, false); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 // Unsubscribe link in every email. Two steps (page + button) so email scanners can't unsubscribe people by accident.
 async function unsubEmail(tok) {
   const [e, sig] = String(tok || '').split('.'); let email = '';
@@ -512,14 +527,13 @@ app.post('/u/:tok', async (req, res) => {
   res.send(unsubPage('<p>Done. You won\'t get marketing emails from us anymore.</p>'));
 });
 
-// The Gmail script, with this app's key built in. Setup → "Get Gmail script".
-app.get('/api/script', async (req, res) => {
-  const k = await rand(K.key);
-  res.type('text/plain').send(`// Dielman HQ: reads estimate + confirmation emails and sends HQ's queued emails from this Gmail.
-// Setup (once, logged into info@dielmanmoving.com): script.google.com > New project > paste this > Save >
+// The Gmail script (no key inside; it pairs itself on first run). Setup → "Open the Gmail script".
+app.get('/api/script', (req, res) => res.type('text/plain').send(gmailScript()));
+function gmailScript() {
+  return `// Dielman HQ: reads estimate + confirmation emails and sends HQ's queued emails from this Gmail.
+// Setup (once, logged into ${BIZ.email}): script.google.com > New project > paste this > Save >
 // pick "setup" in the top bar > Run > Allow. It then runs every hour by itself.
 const HQ = '${CFG.BASE}';
-const KEY = '${k}';
 const LABEL = 'Dielman-HQ';
 const FINDS = [
   { type: 'estimate', q: 'in:sent "Here is your estimate for your move"' },
@@ -527,6 +541,7 @@ const FINDS = [
 ];
 function setup() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  key();
   ScriptApp.newTrigger('run').timeBased().everyHours(1).create();
   run();
 }
@@ -535,7 +550,20 @@ function run() {
   sendQueued();
   readEmails(start);
 }
+// Pairs with HQ the first time and remembers the key in this script's own storage.
+function key() {
+  const props = PropertiesService.getScriptProperties();
+  let k = props.getProperty('KEY');
+  if (!k) {
+    const r = UrlFetchApp.fetch(HQ + '/public/dielman/pair', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify({ email: me() }) });
+    if (r.getResponseCode() !== 200) throw new Error('Could not connect to Dielman HQ: ' + r.getContentText());
+    k = JSON.parse(r.getContentText()).key;
+    props.setProperty('KEY', k);
+  }
+  return k;
+}
 function post(path, obj) {
+  obj.key = key();
   const r = UrlFetchApp.fetch(HQ + path, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify(obj) });
   if (r.getResponseCode() !== 200) throw new Error('HQ said ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
   return JSON.parse(r.getContentText());
@@ -553,7 +581,6 @@ function item(type, th, phrase) {
 // New emails first, then old ones in batches (labels each thread once HQ has it), until ~4.5 minutes are used.
 function readEmails(start) {
   const label = GmailApp.getUserLabelByName(LABEL) || GmailApp.createLabel(LABEL);
-  // re-check recent estimates for customer replies
   sendThreads('estimate', GmailApp.search('label:' + LABEL + ' "Here is your estimate for your move" newer_than:4d', 0, 100), null);
   FINDS.forEach(function (f) {
     const phrase = f.q.match(/"(.+)"/)[1];
@@ -568,26 +595,26 @@ function sendThreads(type, threads, label, phrase) {
   phrase = phrase || 'Here is your estimate for your move';
   const items = [];
   threads.forEach(function (th) { const it = item(type, th, phrase); if (it) items.push(it); });
-  if (items.length) post('/public/dielman/ingest', { key: KEY, items: items });
+  if (items.length) post('/public/dielman/ingest', { items: items });
   if (label) label.addToThreads(threads);
 }
 // Sends emails waiting in HQ (HQ decides how many per hour and per day).
 function sendQueued() {
   const left = MailApp.getRemainingDailyQuota();
   if (left < 100) return;
-  const r = UrlFetchApp.fetch(HQ + '/public/dielman/outbox?key=' + KEY + '&max=' + Math.min(40, left - 100), { muteHttpExceptions: true });
+  const r = UrlFetchApp.fetch(HQ + '/public/dielman/outbox?key=' + key() + '&max=' + Math.min(40, left - 100), { muteHttpExceptions: true });
   if (r.getResponseCode() !== 200) return;
   const done = [];
   (JSON.parse(r.getContentText()).items || []).forEach(function (it) {
     try { GmailApp.sendEmail(it.to, it.subject, it.text, { htmlBody: it.html, name: '${BIZ.name}' }); done.push({ id: it.id, ok: true }); }
     catch (e) { done.push({ id: it.id, ok: false, err: String(e) }); }
   });
-  if (done.length) post('/public/dielman/sent', { key: KEY, done: done });
+  if (done.length) post('/public/dielman/sent', { done: done });
 }
-`);
-});
+`;
+}
 
 app.use((req, res) => res.status(404).send('Not found'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Dielman HQ on ' + PORT + (CFG.REDIS_URL ? ' (Upstash)' : ' (local file storage)')));
-module.exports = { readEmail, parseMoveDate, bookedMoves };
+module.exports = { readEmail, parseMoveDate, bookedMoves, gmailScript };

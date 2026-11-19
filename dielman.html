@@ -85,7 +85,7 @@ section{display:none}section.on{display:block}
  <div class="card" style="font-size:14px">
   1. Logged into info@dielmanmoving.com, open <b>script.google.com</b> → New project.<br>
   2. <button class="link" id="getScript">Open the Gmail script</button>, copy all of it, paste it in, and click Save.<br>
-  3. Choose <b>setup</b> in the top bar → Run → Allow. It then runs every hour: it reads estimate + confirmation emails (old ones too) and sends the emails waiting here.
+  3. Choose <b>setup</b> in the top bar → Run → Allow. It then runs every hour: it reads estimate + confirmation emails (old ones too) and sends the emails waiting here.<br><button class="link" id="resetGmail" style="margin-top:8px">Reset Gmail connection</button> <span class="hint">(only if you reinstall the script)</span>
  </div>
  <div class="hint" style="margin-top:14px"><a href="/logout" style="color:var(--mut)">Log out</a></div>
 </section>
@@ -156,12 +156,13 @@ function drawSteps(){$('steps').innerHTML=S.steps.map(function(s){
   box.querySelector('.b1').onclick=function(){var p={id:s.id};var q=function(c){return box.querySelector(c)};if(q('.es')){p.subject=q('.es').value;p.body=q('.eb').value}if(q('.et'))p.text=q('.et').value;api('/api/step',p).then(function(){toast('Saved');load()}).catch(function(e){toast(e.message,1)})}}})}
 
 function drawSetup(){var t=S.status;
- $('status').innerHTML=[[t.gmailLast&&Date.now()-t.gmailLast<3*3600e3,'Gmail script: last checked in '+ago(t.gmailLast)+(t.gmailTotal?' · '+t.gmailTotal+' emails read':'')],
-  [t.textsReady,t.textsReady?'TextMagic connected':'Texts off: add TEXTMAGIC_USERNAME + TEXTMAGIC_API_KEY in Railway'],
+ $('status').innerHTML=[[t.gmailPaired&&t.gmailLast&&Date.now()-t.gmailLast<3*3600e3,(t.gmailPaired?'Gmail connected':'Gmail not connected yet')+' · last checked in '+ago(t.gmailLast)+(t.gmailTotal?' · '+t.gmailTotal+' emails read':'')],
+  [t.baseOk,t.baseOk?'App address set':'Add PUBLIC_BASE_URL in Railway (unsubscribe links need it)'],[t.textsReady,t.textsReady?'TextMagic connected':'Texts off: add TEXTMAGIC_USERNAME + TEXTMAGIC_API_KEY in Railway'],
   [true,t.customers+' past customers · '+t.repeat+' repeat · '+t.optouts+' opted out'],
   [true,t.emailQueue+' emails waiting to send']].map(function(r){return'<div class="stat"><span class="dot'+(r[0]?' ok':'')+'"></span>'+esc(r[1])+'</div>'}).join('');
  if(document.activeElement.tagName!=='INPUT'){$('testPhone').value=S.settings.testPhone;$('testEmail').value=S.settings.testEmail;$('reviewLink').value=S.settings.reviewLink}}
 $('saveSet').onclick=function(){api('/api/settings',{testPhone:$('testPhone').value,testEmail:$('testEmail').value,reviewLink:$('reviewLink').value}).then(function(){toast('Saved');load()}).catch(function(e){toast(e.message,1)})};
+$('resetGmail').onclick=function(){confirmBox('Reset Gmail connection?','The current Gmail script stops working until you run "setup" in a freshly pasted script.','','Reset',function(){api('/api/gmail/reset',{}).then(function(){toast('Reset. Paste the script again and run setup.');load()}).catch(function(e){toast(e.message,1)})})};
 $('getScript').onclick=function(){window.open('/api/script','_blank')};
 
 function load(){return api('/api/state').then(function(j){var first=!S;S=j;
