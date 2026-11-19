@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#00593D"><title>Dielman HQ</title>
+<style>
+:root{--g:#00593D;--g2:#0a7a55;--gl:#e6f1ec;--ink:#17201c;--mut:#66716b;--line:#e2e7e4;--bg:#f5f7f6;--red:#b3261e}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+header{background:var(--g);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:24px}
+header b{font-size:18px}nav{flex:1}nav a{color:#bfd9cd;margin-right:18px;font-weight:600;cursor:pointer;text-decoration:none}nav a.on{color:#fff;border-bottom:2px solid #fff;padding-bottom:3px}
+header .gear{color:#bfd9cd;cursor:pointer;font-weight:600;font-size:14px}header .gear.on{color:#fff}
+main{max-width:860px;margin:0 auto;padding:20px}
+h2{font-size:13px;margin:22px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:6px}.seg button{border:0;background:#fff;padding:8px 22px;font-weight:600;cursor:pointer;color:var(--mut);font-size:14px}.seg button.on{background:var(--g);color:#fff}
+label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px}
+select,input,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;background:#fff;color:var(--ink)}textarea{min-height:120px;resize:vertical}
+.aud{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.a{border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;font-size:13px;background:#fff;text-align:left;font-family:inherit;color:var(--ink)}.a b{display:block;font-size:14px}.a span{color:var(--mut)}.a.on{border-color:var(--g);background:var(--gl)}
+.hint{font-size:12px;color:var(--mut);margin-top:6px}.fixed{background:#f3f5f4;border-radius:6px;padding:7px 10px;font-size:12px;color:var(--mut);margin-top:6px}
+.go{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.b1{background:var(--g);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer}.b1:disabled{opacity:.45;cursor:default}
+.b2{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;color:var(--ink);font-size:14px}
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}.row:first-child{border-top:0}.row .w{flex:1;min-width:0}.row .w span{display:block;color:var(--mut);font-size:12px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:5px;margin-right:6px}.t{background:#e6f4ff;color:#0b63a8}.e{background:#f3e8ff;color:#6b2fb3}.p{background:#fdeee6;color:#a8461b}
+.num{font-size:12px;color:var(--mut);white-space:nowrap;text-align:right}
+.step{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}.step:first-child{border-top:0}
+.when{width:92px;font-weight:700;color:var(--g);font-size:13px;padding-top:2px;flex:none}.what{flex:1;min-width:0}.what b{display:block}.what .msg{color:var(--mut);font-size:13px;white-space:pre-line}
+.sw{width:44px;height:26px;border-radius:99px;background:#cfd6d2;position:relative;flex:none;margin-top:2px;cursor:pointer;border:0}.sw:after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.15s}.sw.on{background:var(--g)}.sw.on:after{left:21px}.sw:disabled{opacity:.35;cursor:default}
+.warn{color:#a8461b;font-size:12px;margin-top:4px}.link{color:var(--g2);font-size:13px;font-weight:600;cursor:pointer;background:none;border:0;padding:0;font-family:inherit}
+.picked{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.pk{background:var(--gl);color:var(--g);border-radius:99px;padding:3px 10px;font-size:13px;font-weight:600;cursor:pointer}
+.res{border:1px solid var(--line);border-radius:8px;margin-top:6px;max-height:220px;overflow:auto}.res div{padding:8px 10px;border-top:1px solid var(--line);cursor:pointer;font-size:14px}.res div:first-child{border-top:0}.res div:hover{background:var(--gl)}.res span{color:var(--mut);font-size:12px;margin-left:6px}
+.stat{display:flex;gap:8px;align-items:center;font-size:14px;padding:6px 0}.dot{width:9px;height:9px;border-radius:50%;background:#c9a227;flex:none}.dot.ok{background:#1a9b5f}
+section{display:none}section.on{display:block}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:9}.modal.on{display:flex}
+.box{background:#fff;border-radius:14px;padding:20px;max-width:420px;width:100%}.box h3{margin:0 0 8px}.box p{margin:0 0 6px;color:var(--mut);font-size:14px}.box .prev{background:#f3f5f4;border-radius:8px;padding:10px;font-size:13px;white-space:pre-line;margin:10px 0;max-height:180px;overflow:auto;color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#17201c;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:10;max-width:90%}
+.err{color:var(--red)}
+@media(max-width:640px){.aud{grid-template-columns:1fr 1fr}.when{width:66px}main{padding:14px}}
+</style></head><body>
+<header><b>Dielman HQ</b><nav><a class="on" data-t="send">Send</a><a data-t="auto">Automatic</a></nav><span class="gear" data-t="setup">Setup</span></header>
+<main>
+<section id="send" class="on">
+ <div class="card">
+  <div class="seg" id="chan"><button class="on" data-c="text">Text</button><button data-c="email">Email</button></div>
+  <label>Who gets it</label>
+  <div class="aud" id="aud"></div>
+  <div id="pickBox" style="display:none">
+   <input id="pq" placeholder="Search name, phone or email" autocomplete="off">
+   <div class="res" id="pres" style="display:none"></div>
+   <div class="picked" id="picked"></div>
+  </div>
+  <div class="hint" id="audHint"></div>
+
+  <label>Start from</label>
+  <select id="tpl"><option value="">Blank</option></select>
+  <div id="subjWrap" style="display:none"><label>Subject</label><input id="subj" maxlength="150"></div>
+  <label>Message <span style="font-weight:400;color:var(--mut)">· {first} = their first name</span></label>
+  <textarea id="body"></textarea>
+  <div class="fixed" id="fixed"></div>
+
+  <div id="schedWrap" style="display:none"><label>Send at</label><input type="datetime-local" id="sendAt"></div>
+  <div class="go"><button class="b1" id="sendBtn">Send</button><button class="b2" id="testBtn">Send me a test first</button><button class="b2" id="schedBtn">Schedule…</button></div>
+ </div>
+ <h2>Sent</h2>
+ <div class="card" id="camps"></div>
+</section>
+
+<section id="auto">
+ <div class="card">
+  <div class="hint" style="margin:0 0 4px">Runs by itself after every booked move. All steps start OFF. Turning one on never messages old customers. It only reaches people whose step date was in the last 3 days.</div>
+  <div id="steps"></div>
+ </div>
+</section>
+
+<section id="setup">
+ <h2>Status</h2>
+ <div class="card" id="status"></div>
+ <h2>Your contact for test sends</h2>
+ <div class="card">
+  <label style="margin-top:0">Your cell (test texts)</label><input id="testPhone" placeholder="314-555-0123">
+  <label>Your email (test emails)</label><input id="testEmail" placeholder="you@example.com">
+  <label>Google review link (used by the Day 2 text)</label><input id="reviewLink" placeholder="https://g.page/r/…/review">
+  <div class="go"><button class="b1" id="saveSet">Save</button></div>
+ </div>
+ <h2>Connect his Gmail (once)</h2>
+ <div class="card" style="font-size:14px">
+  1. Logged into info@dielmanmoving.com, open <b>script.google.com</b> → New project.<br>
+  2. <button class="link" id="getScript">Open the Gmail script</button>, copy all of it, paste it in, and click Save.<br>
+  3. Choose <b>setup</b> in the top bar → Run → Allow. It then runs every hour: it reads estimate + confirmation emails (old ones too) and sends the emails waiting here.
+ </div>
+ <div class="hint" style="margin-top:14px"><a href="/logout" style="color:var(--mut)">Log out</a></div>
+</section>
+</main>
+
+<div class="modal" id="modal"><div class="box"><h3 id="mT"></h3><p id="mP"></p><div class="prev" id="mPrev"></div><div class="go" style="margin-top:8px"><button class="b1" id="mOk"></button><button class="b2" id="mNo">Cancel</button></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+var S=null, ch='text', aud='all', picks={}, schedOn=false;
+var $=function(id){return document.getElementById(id)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+function toast(m,bad){var t=$('toast');t.textContent=m;t.style.background=bad?'#b3261e':'#17201c';t.style.display='block';clearTimeout(t._t);t._t=setTimeout(function(){t.style.display='none'},4500)}
+function api(p,body){return fetch(p,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{}).then(function(r){if(r.status===401){location.reload();throw new Error('login')}return r.json().then(function(j){if(!r.ok){var e=new Error(j.error||'Something went wrong');e.j=j;throw e}return j})})}
+function ago(t){if(!t)return'never';var m=Math.round((Date.now()-t)/60000);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' hr ago':Math.round(m/1440)+' days ago'}
+function when(t){return new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}
+
+document.querySelectorAll('[data-t]').forEach(function(a){a.onclick=function(){var id=a.getAttribute('data-t');document.querySelectorAll('section').forEach(function(s){s.classList.toggle('on',s.id===id)});document.querySelectorAll('[data-t]').forEach(function(x){x.classList.toggle('on',x===a)})}});
+document.querySelectorAll('#chan button').forEach(function(b){b.onclick=function(){ch=b.getAttribute('data-c');document.querySelectorAll('#chan button').forEach(function(x){x.classList.toggle('on',x===b)});draw()}});
+
+function count(){if(aud==='pick'){return Object.values(picks).filter(function(p){return ch==='text'?p.phone:p.email}).length}var a=S.audiences.find(function(x){return x.id===aud});return a?a[ch]:0}
+function segs(s){var n=(/\bSTOP\b/.test(s)?s:s.trim()+'\nReply STOP to opt out.').length;return n<=160?1:Math.ceil(n/153)}
+function drawFixed(){var n=count(),b=$('body').value;
+ if(ch==='text'){var sg=segs(b);$('fixed').textContent='Added automatically: "Reply STOP to opt out." · '+(sg>1?sg+' text segments each · ':'')+'about $'+Math.max(1,Math.round(n*sg*S.textPrice))+' for '+n+' texts. Texts go out right away through TextMagic.'}
+ else{var d=Math.max(1,Math.ceil(n/S.emailPerDay));$('fixed').textContent='Added automatically: unsubscribe link + business address. Sends from info@dielmanmoving.com, up to '+S.emailPerDay+' a day'+(n>S.emailPerDay?', so '+n+' emails finish in about '+d+' days.':'. The first ones go out within the hour.')}
+ $('sendBtn').textContent=(schedOn?'Schedule for ':'Send to ')+n+(n===1?' person':' people');$('sendBtn').disabled=!n}
+function draw(){
+ $('aud').innerHTML=S.audiences.map(function(a){return'<button class="a'+(aud===a.id?' on':'')+'" data-a="'+a.id+'"><b>'+esc(a.name)+'</b><span>'+a[ch]+(a[ch]===1?' person':' people')+'</span></button>'}).join('')+'<button class="a'+(aud==='pick'?' on':'')+'" data-a="pick"><b>Pick people…</b><span>search by name/phone</span></button>';
+ document.querySelectorAll('#aud .a').forEach(function(b){b.onclick=function(){aud=b.getAttribute('data-a');draw()}});
+ $('pickBox').style.display=aud==='pick'?'block':'none';
+ var a=S.audiences.find(function(x){return x.id===aud});
+ $('audHint').textContent=aud==='pick'?'':a?(a.total-a[ch])+' of '+a.total+' skipped (no '+(ch==='text'?'phone':'email')+' on file, or opted out).':'';
+ $('subjWrap').style.display=ch==='email'?'block':'none';
+ $('picked').innerHTML=Object.values(picks).map(function(p){return'<span class="pk" data-id="'+esc(p.id)+'">'+esc(p.name)+' ✕</span>'}).join('');
+ document.querySelectorAll('.pk').forEach(function(x){x.onclick=function(){delete picks[x.getAttribute('data-id')];draw()}});
+ drawFixed()}
+$('body').oninput=drawFixed;
+$('tpl').onchange=function(){var t=S.templates.find(function(x){return x.id===$('tpl').value});if(!t)return;$('body').value=t.body;$('subj').value=t.subject;drawFixed()};
+var pt;$('pq').oninput=function(){clearTimeout(pt);var q=$('pq').value;pt=setTimeout(function(){if(q.length<2){$('pres').style.display='none';return}api('/api/people?q='+encodeURIComponent(q)).then(function(j){$('pres').style.display=j.people.length?'block':'none';$('pres').innerHTML=j.people.map(function(p,i){return'<div data-i="'+i+'">'+esc(p.name)+'<span>'+esc(p.last)+(p.phone?'':' · no phone')+(p.email?'':' · no email')+'</span></div>'}).join('');document.querySelectorAll('#pres div').forEach(function(d){d.onclick=function(){var p=j.people[+d.getAttribute('data-i')];picks[p.id]=p;$('pq').value='';$('pres').style.display='none';draw()}})})},250)};
+$('schedBtn').onclick=function(){schedOn=!schedOn;$('schedWrap').style.display=schedOn?'block':'none';$('schedBtn').textContent=schedOn?'Send now instead':'Schedule…';drawFixed()};
+
+function payload(extra){var p={channel:ch,audience:aud,picks:Object.keys(picks),subject:$('subj').value,body:$('body').value};for(var k in extra)p[k]=extra[k];return p}
+function confirmBox(title,text,prev,ok,fn){$('mT').textContent=title;$('mP').textContent=text;$('mPrev').textContent=prev;$('mPrev').style.display=prev?'block':'none';$('mOk').textContent=ok;$('modal').classList.add('on');$('mOk').onclick=function(){$('modal').classList.remove('on');fn()}}
+$('mNo').onclick=function(){$('modal').classList.remove('on')};
+$('sendBtn').onclick=function(){var n=count(),b=$('body').value.trim();if(!b)return toast('Write a message first',1);if(ch==='email'&&!$('subj').value.trim())return toast('Add a subject',1);
+ var at=schedOn?$('sendAt').value:'';if(schedOn&&!at)return toast('Pick a date and time',1);
+ var cost=ch==='text'?' About $'+Math.max(1,Math.round(n*segs(b)*S.textPrice))+'.':'';
+ var prev=(ch==='email'?'Subject: '+$('subj').value+'\n\n':'')+b.replace(/\{first\}/g,'Sarah')+(ch==='text'&&!/\bSTOP\b/.test(b)?'\nReply STOP to opt out.':'');
+ confirmBox((at?'Schedule ':'Send ')+(ch==='text'?'text':'email')+' to '+n+(n===1?' person':' people')+'?',(at?'Goes out '+when(at)+'.':ch==='text'?'Texts go out right away. This can\'t be undone.':'Emails start going out within the hour.')+cost,prev,at?'Schedule':'Yes, send',function(){
+  api('/api/send',payload({expect:n,sendAt:at?new Date(at).toISOString():''})).then(function(j){toast((at?'Scheduled ':'Sending to ')+j.count+' people');$('body').value='';$('subj').value='';$('tpl').value='';picks={};if(schedOn)$('schedBtn').onclick();load()}).catch(function(e){toast(e.message,1);if(e.j&&e.j.count!=null)load()})})};
+$('testBtn').onclick=function(){if(!$('body').value.trim())return toast('Write a message first',1);api('/api/send',payload({test:true})).then(function(j){toast(j.msg)}).catch(function(e){toast(e.message,1)})};
+
+function drawCamps(){var c=S.campaigns;if(!c.length){$('camps').innerHTML='<div class="hint" style="margin:0">Nothing sent yet.</div>';return}
+ $('camps').innerHTML=c.map(function(x){var st=x.status==='canceled'?'canceled':x.status==='scheduled'?'scheduled '+when(x.sendAt):x.waiting?x.sent+' sent · '+x.waiting+' waiting':x.sent+' sent';if(x.failed)st+=' · <span class="err">'+x.failed+' failed</span>';
+  return'<div class="row"><span class="tag '+(x.ch==='text'?'t':'e')+'">'+(x.ch==='text'?'TEXT':'EMAIL')+'</span><div class="w">'+esc(x.subject||x.preview||'Text')+'<span>'+when(x.createdAt)+' · '+esc(x.audience)+'</span></div><span class="num">'+st+(x.status==='scheduled'?' <button class="link" data-cancel="'+x.id+'">Cancel</button>':'')+'</span></div>'}).join('');
+ document.querySelectorAll('[data-cancel]').forEach(function(b){b.onclick=function(){api('/api/campaign/cancel',{id:b.getAttribute('data-cancel')}).then(function(){toast('Canceled');load()}).catch(function(e){toast(e.message,1)})}})}
+
+function drawSteps(){$('steps').innerHTML=S.steps.map(function(s){
+  var tags=s.postcard?'<span class="tag p">POSTCARD</span>':(s.ch||[]).map(function(c){return'<span class="tag '+(c==='text'?'t':'e')+'">'+(c==='text'?'TEXT':'EMAIL')+'</span>'}).join('');
+  var msg=s.postcard?'':(s.subject?'Subject: '+s.subject+'\n'+s.body:'')+(s.text?(s.subject?'\n\nText: ':'')+s.text:'');
+  var warn=s.postcard?'<div class="warn">Not connected</div>':s.needsReview&&!S.settings.reviewLink?'<div class="warn">Add the Google review link in Setup first</div>':'';
+  return'<div class="step"><div class="when">'+esc(s.when)+'</div><div class="what"><b>'+tags+esc(s.title)+'</b><div class="msg">'+esc(msg)+'</div>'+warn+(s.postcard?'':'<button class="link" data-edit="'+s.id+'">Edit</button><div id="ed-'+s.id+'"></div>')+'</div><button class="sw'+(s.on?' on':'')+'" data-sw="'+s.id+'"'+(s.postcard?' disabled':'')+' aria-label="Turn '+esc(s.title)+' on or off"></button></div>'}).join('');
+ document.querySelectorAll('[data-sw]').forEach(function(b){b.onclick=function(){var s=S.steps.find(function(x){return x.id===b.getAttribute('data-sw')}),on=!s.on;
+  var go=function(){api('/api/step',{id:s.id,on:on}).then(function(){toast(s.title+(on?' is ON':' is OFF'));load()}).catch(function(e){toast(e.message,1)})};
+  if(on)confirmBox('Turn on "'+s.title+'"?','From now on this goes out automatically to customers whose '+s.when.toLowerCase()+' lands today or in the last 3 days. Nobody older gets it.','','Turn on',go);else go()}});
+ document.querySelectorAll('[data-edit]').forEach(function(b){b.onclick=function(){var s=S.steps.find(function(x){return x.id===b.getAttribute('data-edit')}),box=$('ed-'+s.id);
+  box.innerHTML=(s.subject!==undefined?'<label>Email subject</label><input class="es" value="'+esc(s.subject)+'"><label>Email</label><textarea class="eb">'+esc(s.body)+'</textarea>':'')+(s.text!==undefined?'<label>Text</label><textarea class="et" style="min-height:80px">'+esc(s.text)+'</textarea>':'')+'<div class="go"><button class="b1">Save</button></div>';
+  box.querySelector('.b1').onclick=function(){var p={id:s.id};var q=function(c){return box.querySelector(c)};if(q('.es')){p.subject=q('.es').value;p.body=q('.eb').value}if(q('.et'))p.text=q('.et').value;api('/api/step',p).then(function(){toast('Saved');load()}).catch(function(e){toast(e.message,1)})}}})}
+
+function drawSetup(){var t=S.status;
+ $('status').innerHTML=[[t.gmailLast&&Date.now()-t.gmailLast<3*3600e3,'Gmail script: last checked in '+ago(t.gmailLast)+(t.gmailTotal?' · '+t.gmailTotal+' emails read':'')],
+  [t.textsReady,t.textsReady?'TextMagic connected':'Texts off: add TEXTMAGIC_USERNAME + TEXTMAGIC_API_KEY in Railway'],
+  [true,t.customers+' past customers · '+t.repeat+' repeat · '+t.optouts+' opted out'],
+  [true,t.emailQueue+' emails waiting to send']].map(function(r){return'<div class="stat"><span class="dot'+(r[0]?' ok':'')+'"></span>'+esc(r[1])+'</div>'}).join('');
+ if(document.activeElement.tagName!=='INPUT'){$('testPhone').value=S.settings.testPhone;$('testEmail').value=S.settings.testEmail;$('reviewLink').value=S.settings.reviewLink}}
+$('saveSet').onclick=function(){api('/api/settings',{testPhone:$('testPhone').value,testEmail:$('testEmail').value,reviewLink:$('reviewLink').value}).then(function(){toast('Saved');load()}).catch(function(e){toast(e.message,1)})};
+$('getScript').onclick=function(){window.open('/api/script','_blank')};
+
+function load(){return api('/api/state').then(function(j){var first=!S;S=j;
+ if(first){$('tpl').innerHTML='<option value="">Blank</option>'+S.templates.map(function(t){return'<option value="'+t.id+'">'+esc(t.name)+'</option>'}).join('')}
+ draw();drawCamps();drawSteps();drawSetup()}).catch(function(e){if(e.message!=='login')toast(e.message,1)})}
+load();setInterval(function(){if(!$('modal').classList.contains('on'))api('/api/state').then(function(j){S=j;drawCamps();drawSetup();var n=document.activeElement;if(!n||n.tagName==='BODY'){draw();drawSteps()}}).catch(function(){})},30000);
+</script>
+</body></html>
