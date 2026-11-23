@@ -614,6 +614,26 @@ function sendQueued() {
 `;
 }
 
+// Public SMS terms + privacy page (needed for the 10DLC text-message registration).
+app.get(['/sms-terms', '/privacy'], (req, res) => res.set('Cache-Control', 'public, max-age=3600').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SMS Terms &amp; Privacy — ${esc(BIZ.name)}, Inc.</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:0 auto;padding:28px 20px 60px;color:#17201c;line-height:1.55}h1{color:#00593D;font-size:26px}h2{color:#00593D;font-size:18px;margin-top:28px}</style></head><body>
+<h1>${esc(BIZ.name)}, Inc. — SMS Terms &amp; Privacy Policy</h1>
+<p>Last updated: November 23, 2026</p>
+<h2>Text message program</h2>
+<p>${esc(BIZ.name)}, Inc. ("Dielman Moving") sends customer-care text messages to customers who give us their mobile number when they request a moving estimate or book a move, on our website estimate form or by phone. Messages are about the customer's own move: a thank-you on move day, a request to review our service, a follow-up about storage or junk removal, and a check-in on the anniversary of the move.</p>
+<p>Message frequency varies (about 4 messages per move). Message and data rates may apply. Consent to receive texts is not a condition of any purchase.</p>
+<h2>How to opt out or get help</h2>
+<p>Reply <b>STOP</b> to any message to stop receiving texts. You will get one confirmation message and no further texts. Reply <b>HELP</b> for help, or call us at ${esc(BIZ.phone)} or email ${esc(BIZ.email)}.</p>
+<p>Carriers are not liable for delayed or undelivered messages.</p>
+<h2>Privacy</h2>
+<p>We use your name, phone number, email address and move details only to provide our moving and storage services and to send the messages described above.</p>
+<p><b>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</b> Text messaging originator opt-in data and consent will not be shared with any third parties, except with the service providers that deliver our messages (such as our SMS provider), who may use it only to send our messages.</p>
+<p>We do not sell your personal information. You can ask us to stop contacting you or to delete your information at any time by emailing ${esc(BIZ.email)} or calling ${esc(BIZ.phone)}.</p>
+<h2>Contact</h2>
+<p>${esc(BIZ.name)}, Inc.<br>${esc(BIZ.addr)}<br>${esc(BIZ.phone)} · ${esc(BIZ.email)}</p>
+</body></html>`));
+
 app.use((req, res) => res.status(404).send('Not found'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Dielman HQ on ' + PORT + (CFG.REDIS_URL ? ' (Upstash)' : ' (local file storage)')));
