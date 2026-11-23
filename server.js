@@ -28,6 +28,8 @@ const CFG = {
   BASE: (process.env.PUBLIC_BASE_URL || 'http://localhost:' + (process.env.PORT || 3000)).trim().replace(/\/$/, ''),
 };
 const BIZ = { name: 'Dielman Moving & Storage', addr: '8730 Big Bend Blvd, Unit F-3, Webster Groves, MO 63119', phone: '314-428-6683', email: 'info@dielmanmoving.com' };
+// Dielman's own numbers appear in email headers/footers ('Phone: … Fax: …'); never treat them as a customer's phone.
+const BIZ_PHONES = new Set(['13144286683', '13142797255']);
 const EMAIL_PER_DAY = 300;        // marketing emails per day from his Gmail (Workspace allows ~1,500 total; leaves room for his normal email)
 const EMAIL_HOURS = [8, 19];      // emails only go out 8am–7pm Central
 const TEXT_PRICE = 0.05;          // rough TextMagic cost per text segment, for the estimate on the Send button
@@ -146,22 +148,24 @@ function parseMoveDate(s, fallbackYear) {
 function readEmail(it) {
   const body = String(it.body || ''), type = it.type === 'confirm' ? 'confirm' : 'estimate';
   const sent = it.date ? ymd(new Date(it.date)) : '';
-  const hello = field(body, /Hello\s+([^,\n]+),/i);
+  const hello = field(body, /(?:Hello|Hi|Dear|Good (?:morning|afternoon|evening))\s+([^,\n]{1,40}),/i);
+  let phone = '';   // first customer phone that isn't one of Dielman's own numbers
+  for (const m of body.matchAll(/(?:PHONE(?: NUMBER)?|CELL(?: PHONE)?|MOBILE)\s*(?:#|NUMBER)?\s*:[ \t]*([^\n]+)/gi)) { const p = normPhone(m[1].split(/fax|ext/i)[0]); if (p && !BIZ_PHONES.has(p)) { phone = p; break; } }
   const name = field(body, /CUSTOMER NAME:[ \t]*([^\n]+)/i) || hello;
   return {
     id: clean(it.threadId, 40) + ':' + type, type, threadId: clean(it.threadId, 40),
-    email: normEmail(it.to), phone: normPhone(field(body, /PHONE(?: NUMBER)?:[ \t]*([^\n]+)/i)),
+    email: normEmail(it.to), phone,
     name, first: clean((hello || name).split(/\s+/)[0], 30).replace(/^\w/, c => c.toUpperCase()),
-    moveDate: parseMoveDate(field(body, /(?:MOVE DATE|Moving date):[ \t]*([^\n]+)/i), (sent || '').slice(0, 4)),
-    pickup: field(body, /PICK ?UP:[ \t]*([^\n]+)/i), delivery: field(body, /DELIVERY:[ \t]*([^\n]+)/i),
-    crew: field(body, /(?:CREW SIZE & RATES|Rates\/Crew Size):[ \t]*([^\n]+)/i),
+    moveDate: parseMoveDate(field(body, /(?:MOVE DATE|MOVING DATE|DATE OF (?:THE )?MOVE|MOVE DAY)\s*:[ \t]*([^\n]+)/i) || field(body, /^[ \t*]*DATE\s*:[ \t]*([^\n]+)/im), (sent || '').slice(0, 4)),
+    pickup: field(body, /PICK[ -]?UP\s*:[ \t]*([^\n]+)/i), delivery: field(body, /DELIVERY\s*:[ \t]*([^\n]+)/i),
+    crew: field(body, /(?:CREW SIZE & RATES|Rates\/Crew Size|STAFF)\s*:[ \t]*([^\n]+)/i),
     sent, replied: !!it.replied, at: Date.now(),
   };
 }
 const shortPlace = a => { const m = String(a || '').match(/([A-Za-z .'-]+),?\s+MO\b/i); return m ? clean(m[1].split(/[.,]/).pop(), 30) : clean(a, 30); };
 
 // ===================== BOOKED RULE — the ONE place that decides what counts as a real move =====================
-// 1) Every "Here is your confirmation for your move" email = a booked move (on its moving date).
+// 1) Every confirmation email he sends (subject contains "Confirmation", not "Onsite") = a booked move (on its move date).
 // 2) An estimate the customer replied to also counts (his estimate says the crew can't be dispatched until they reply),
 //    unless a confirmation for the same customer already covers it (move dates within 45 days).
 // Change this function if Charles says otherwise; everything else (counts, lists, automatic steps) follows it.
@@ -185,6 +189,9 @@ let PEOPLE = null;
 async function people() {
   if (PEOPLE) return PEOPLE;
   const recs = Object.values(await db.hall(K.rec)).filter(r => r.email || r.phone);
+  // A phone that shows up with 4+ different customer emails is an office/business number, not a customer's.
+  const phoneEmails = {}; recs.forEach(r => { if (r.phone && r.email) (phoneEmails[r.phone] = phoneEmails[r.phone] || new Set()).add(r.email); });
+  recs.forEach(r => { if (r.phone && (BIZ_PHONES.has(r.phone) || (phoneEmails[r.phone] && phoneEmails[r.phone].size >= 4))) r.phone = ''; });
   // union-find on email/phone so one customer with two emails or a new phone stays one person
   const parent = {}; const find = x => (parent[x] === undefined ? (parent[x] = x) : parent[x] === x ? x : (parent[x] = find(parent[x])));
   const union = (a, b) => { parent[find(a)] = find(b); };
@@ -534,10 +541,10 @@ function gmailScript() {
 // Setup (once, logged into ${BIZ.email}): script.google.com > New project > paste this > Save >
 // pick "setup" in the top bar > Run > Allow. It then runs every hour by itself.
 const HQ = '${CFG.BASE}';
-const LABEL = 'Dielman-HQ';
+// Each email type has its own label so an estimate and a confirmation in the same thread are both read.
 const FINDS = [
-  { type: 'estimate', q: 'in:sent "Here is your estimate for your move"' },
-  { type: 'confirm', q: 'in:sent "Here is your confirmation for your move"' },
+  { type: 'estimate', label: 'Dielman-HQ', q: 'in:sent "Here is your estimate for your move"', phrase: 'Here is your estimate for your move' },
+  { type: 'confirm', label: 'Dielman-HQ-C', q: 'in:sent subject:confirmation -subject:onsite', phrase: '' },
 ];
 function setup() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
@@ -572,7 +579,7 @@ function me() { return Session.getEffectiveUser().getEmail().toLowerCase(); }
 function fromMe(m) { return m.getFrom().toLowerCase().indexOf(me()) >= 0; }
 function item(type, th, phrase) {
   const msgs = th.getMessages();
-  const mine = msgs.filter(function (m) { return !m.isDraft() && fromMe(m) && m.getPlainBody().indexOf(phrase) >= 0; });
+  const mine = msgs.filter(function (m) { return !m.isDraft() && fromMe(m) && (!phrase || m.getPlainBody().indexOf(phrase) >= 0); });
   if (!mine.length) return null;
   const last = mine[mine.length - 1];
   const replied = msgs.some(function (m) { return !m.isDraft() && !fromMe(m) && m.getDate() > mine[0].getDate(); });
@@ -580,19 +587,18 @@ function item(type, th, phrase) {
 }
 // New emails first, then old ones in batches (labels each thread once HQ has it), until ~4.5 minutes are used.
 function readEmails(start) {
-  const label = GmailApp.getUserLabelByName(LABEL) || GmailApp.createLabel(LABEL);
-  sendThreads('estimate', GmailApp.search('label:' + LABEL + ' "Here is your estimate for your move" newer_than:4d', 0, 100), null);
+  // re-check recent estimates for customer replies
+  sendThreads('estimate', GmailApp.search('label:Dielman-HQ "Here is your estimate for your move" newer_than:4d', 0, 100), null, FINDS[0].phrase);
   FINDS.forEach(function (f) {
-    const phrase = f.q.match(/"(.+)"/)[1];
+    const label = GmailApp.getUserLabelByName(f.label) || GmailApp.createLabel(f.label);
     while (Date.now() - start < 270000) {
-      const threads = GmailApp.search(f.q + ' -label:' + LABEL, 0, 25);
+      const threads = GmailApp.search(f.q + ' -label:' + f.label, 0, 25);
       if (!threads.length) break;
-      sendThreads(f.type, threads, label, phrase);
+      sendThreads(f.type, threads, label, f.phrase);
     }
   });
 }
 function sendThreads(type, threads, label, phrase) {
-  phrase = phrase || 'Here is your estimate for your move';
   const items = [];
   threads.forEach(function (th) { const it = item(type, th, phrase); if (it) items.push(it); });
   if (items.length) post('/public/dielman/ingest', { items: items });
