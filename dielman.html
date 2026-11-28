@@ -157,7 +157,7 @@ function drawSteps(){$('steps').innerHTML=S.steps.map(function(s){
 
 function drawSetup(){var t=S.status;
  $('status').innerHTML=[[t.gmailPaired&&t.gmailLast&&Date.now()-t.gmailLast<3*3600e3,(t.gmailPaired?'Gmail connected':'Gmail not connected yet')+' · last checked in '+ago(t.gmailLast)+(t.gmailTotal?' · '+t.gmailTotal+' emails read':'')],
-  [t.baseOk,t.baseOk?'App address set':'Add PUBLIC_BASE_URL in Railway (unsubscribe links need it)'],[t.textsReady,t.textsReady?'TextMagic connected':'Texts off: add TEXTMAGIC_USERNAME + TEXTMAGIC_API_KEY in Railway'],
+  [t.baseOk,t.baseOk?'App address set':'Add PUBLIC_BASE_URL in Railway (unsubscribe links need it)'],[t.instant,t.instant?'Instant email sending on':'Instant email sending off (emails go out on the hourly run)'],[t.textsReady,t.textsReady?'TextMagic connected':'Texts off: add TEXTMAGIC_USERNAME + TEXTMAGIC_API_KEY in Railway'],
   [true,t.customers+' past customers · '+t.repeat+' repeat · '+t.optouts+' opted out'],
   [true,t.emailQueue+' emails waiting to send']].map(function(r){return'<div class="stat"><span class="dot'+(r[0]?' ok':'')+'"></span>'+esc(r[1])+'</div>'}).join('');
  if(document.activeElement.tagName!=='INPUT'){$('testPhone').value=S.settings.testPhone;$('testEmail').value=S.settings.testEmail;$('reviewLink').value=S.settings.reviewLink}}

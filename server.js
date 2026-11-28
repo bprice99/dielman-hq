@@ -84,7 +84,7 @@ const db = {
 };
 const K = {
   sess: 'dm:sess', key: 'dm:scriptKey', secret: 'dm:secret', rec: 'dm:rec', optout: 'dm:optout', settings: 'dm:settings',
-  paired: 'dm:paired', camps: 'dm:camps', out: 'dm:out', jlog: 'dm:jlog', sync: 'dm:sync', mailday: 'dm:mailday',
+  paired: 'dm:paired', hook: 'dm:hook', camps: 'dm:camps', out: 'dm:out', jlog: 'dm:jlog', sync: 'dm:sync', mailday: 'dm:mailday',
 };
 const crKey = id => 'dm:cr:' + id;   // one text campaign's recipients + status
 async function rand(key) { let v = await db.get(key, ''); if (!v) { v = crypto.randomBytes(18).toString('hex'); await db.set(key, v); } return v; }
@@ -286,6 +286,18 @@ async function queueEmail(to, subject, text, camp, notBefore) {
   await db.hset(K.out, { [id]: { id, to, subject, html: b.html, text: b.text, camp, notBefore: notBefore || 0, st: 'q', at: Date.now() } });
 }
 
+// Instant sending: the Gmail script also runs as a private web app. Calling it makes Gmail send what's waiting
+// right away (the hourly timer stays as a backup). Returns how many it sent, or -1 if it couldn't be reached.
+async function kickGmail() {
+  const url = await db.get(K.hook, ''), key = await db.get(K.key, '');
+  if (!url || !key) return -1;
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }), redirect: 'follow', signal: AbortSignal.timeout(90000) });
+    const j = await r.json().catch(() => ({}));
+    return j.ok ? Number(j.sent) || 0 : -1;
+  } catch (e) { console.log('instant send failed', e.message); return -1; }
+}
+
 // ===================== CAMPAIGNS (Send tab) =====================
 const running = new Set();
 async function runTextCampaign(id) {
@@ -317,7 +329,8 @@ app.post('/api/send', async (req, res) => {
       if (ch === 'text') { const p = normPhone(st.testPhone); if (!p) return res.status(400).json({ error: 'Add your phone in Setup first' }); await sendText(p, '[TEST] ' + merge(body, me, st)); return res.json({ ok: true, msg: 'Test text sent to ' + st.testPhone }); }
       const e = normEmail(st.testEmail); if (!e) return res.status(400).json({ error: 'Add your email in Setup first' });
       await queueEmail(e, '[TEST] ' + merge(subject, me, st), merge(body, me, st), 'test', 0);
-      return res.json({ ok: true, msg: 'Test email queued to ' + e + '. The Gmail script sends it within the hour.' });
+      const sent = await kickGmail();
+      return res.json({ ok: true, msg: sent > 0 ? 'Test email sent to ' + e : 'Test email queued to ' + e + '. It goes out on the Gmail script\'s next run.' });
     }
     const list = await audience(b.audience, b.picks, ch);
     if (!list.length) return res.status(400).json({ error: 'Nobody in that group can get a ' + ch });
@@ -334,6 +347,7 @@ app.post('/api/send', async (req, res) => {
       if (!sendAt) runTextCampaign(id).catch(e => console.log('text campaign failed', e.message));
     } else {
       for (const p of list) await queueEmail(p.email, merge(subject, p, st), merge(body, p, st), id, sendAt || 0);
+      if (!sendAt) kickGmail().catch(() => {});
     }
     res.json({ ok: true, id, count: list.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -443,7 +457,7 @@ app.get('/api/state', async (req, res) => {
       audiences: AUDIENCES.map(a => ({ id: a.id, name: a.name, ...counts[a.id] })), templates: TEMPLATES, campaigns: camps,
       steps: await stepsWithSettings(), settings: { reviewLink: st.reviewLink || '', testPhone: st.testPhone || '', testEmail: st.testEmail || '' },
       status: { gmailLast: sync.at || 0, gmailTotal: P.recs, people: P.list.length, customers: counts.all.total, repeat: counts.repeat.total,
-        textsReady: !!(CFG.TM_USER && CFG.TM_KEY), gmailPaired: !!(await db.get(K.paired, false)), baseOk: !!process.env.PUBLIC_BASE_URL, emailQueue: out.filter(o => o.st === 'q').length, optouts: oo.size },
+        textsReady: !!(CFG.TM_USER && CFG.TM_KEY), gmailPaired: !!(await db.get(K.paired, false)), instant: !!(await db.get(K.hook, '')), baseOk: !!process.env.PUBLIC_BASE_URL, emailQueue: out.filter(o => o.st === 'q').length, optouts: oo.size },
       textPrice: TEXT_PRICE, emailPerDay: EMAIL_PER_DAY,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -470,11 +484,13 @@ app.post('/public/dielman/ingest', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Hands the script the next emails to send (respects the daily cap and sending hours).
-app.get('/public/dielman/outbox', async (req, res) => {
+let outboxBusy = Promise.resolve();   // one hand-out at a time, so the timer and an instant call never get the same email
+app.get('/public/dielman/outbox', (req, res) => { outboxBusy = outboxBusy.then(() => outbox(req, res)).catch(() => {}); });
+async function outbox(req, res) {
   try {
     if (!(await keyOk(req.query.key))) return res.status(403).json({ error: 'bad key' });
     const s = await db.get(K.sync, {}); await db.set(K.sync, { ...s, at: Date.now() });
-    const h = hourCT(); if (h < EMAIL_HOURS[0] || h >= EMAIL_HOURS[1]) return res.json({ items: [] });
+    const h = hourCT(), awake = h >= EMAIL_HOURS[0] && h < EMAIL_HOURS[1];   // tests to Billy/Charles go out any hour
     const day = ymdCT(), md = await db.get(K.mailday, {}), used = md.d === day ? md.n : 0;
     const max = Math.max(0, Math.min(Number(req.query.max) || 30, 40, EMAIL_PER_DAY - used));
     if (!max) return res.json({ items: [] });
@@ -482,11 +498,20 @@ app.get('/public/dielman/outbox', async (req, res) => {
     const camps = await db.hall(K.camps);
     const skip = all.filter(o => o.st === 'q' && (oo.has('e:' + o.to) || (camps[o.camp] || {}).status === 'canceled'));
     if (skip.length) await db.hset(K.out, Object.fromEntries(skip.map(o => [o.id, { ...o, st: 'skip' }])));
-    const items = all.filter(o => o.st === 'q' && !skip.includes(o) && (o.notBefore || 0) <= now).sort((a, b) => (a.camp === 'test' ? -1 : 0) - (b.camp === 'test' ? -1 : 0) || a.at - b.at).slice(0, max);
+    const items = all.filter(o => o.st === 'q' && !skip.includes(o) && (o.notBefore || 0) <= now && (awake || o.camp === 'test')).sort((a, b) => (a.camp === 'test' ? -1 : 0) - (b.camp === 'test' ? -1 : 0) || a.at - b.at).slice(0, max);
     if (!items.length) return res.json({ items: [] });
     await db.hset(K.out, Object.fromEntries(items.map(o => [o.id, { ...o, st: 'c', claimedAt: now }])));   // handed out once, never re-sent
     await db.set(K.mailday, { d: day, n: used + items.length });
     res.json({ items: items.map(o => ({ id: o.id, to: o.to, subject: o.subject, html: o.html, text: o.text })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+// The script tells HQ its web-app address so HQ can ask it to send right away.
+app.post('/public/dielman/hook', async (req, res) => {
+  try {
+    const b = req.body || {}; if (!(await keyOk(b.key))) return res.status(403).json({ error: 'bad key' });
+    const url = String(b.url || '');
+    if (!/^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[\w-]+\/exec$/.test(url)) return res.status(400).json({ error: 'not a web app address' });
+    await db.set(K.hook, url); res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/public/dielman/sent', async (req, res) => {
@@ -513,7 +538,7 @@ app.post('/public/dielman/pair', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/gmail/reset', async (req, res) => {
-  try { await db.set(K.key, crypto.randomBytes(18).toString('hex')); await db.set(K.paired, false); res.json({ ok: true }); }
+  try { await db.set(K.key, crypto.randomBytes(18).toString('hex')); await db.set(K.paired, false); await db.set(K.hook, ''); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Unsubscribe link in every email. Two steps (page + button) so email scanners can't unsubscribe people by accident.
@@ -544,7 +569,7 @@ const HQ = '${CFG.BASE}';
 // Each email type has its own label so an estimate and a confirmation in the same thread are both read.
 const FINDS = [
   { type: 'estimate', label: 'Dielman-HQ', q: 'in:sent "Here is your estimate for your move"', phrase: 'Here is your estimate for your move' },
-  { type: 'confirm', label: 'Dielman-HQ-C', q: 'in:sent subject:confirmation -subject:onsite', phrase: '' },
+  { type: 'confirm', label: 'Dielman-HQ-Conf', q: 'in:sent subject:confirmation -subject:onsite', phrase: '' },
 ];
 function setup() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
@@ -554,8 +579,23 @@ function setup() {
 }
 function run() {
   const start = Date.now();
+  reportWebApp();
   sendQueued();
   readEmails(start);
+}
+// Instant sending: after Deploy > Web app, HQ calls this the moment you press Send.
+function doPost(e) {
+  let b = {};
+  try { b = JSON.parse(e.postData.contents); } catch (x) {}
+  const out = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  if (!b.key || b.key !== PropertiesService.getScriptProperties().getProperty('KEY')) return out({ ok: false, error: 'bad key' });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(60000)) return out({ ok: false, error: 'busy' });
+  try { return out({ ok: true, sent: sendQueued() }); } finally { lock.releaseLock(); }
+}
+function reportWebApp() {
+  const url = ScriptApp.getService().getUrl();
+  if (url && /\/exec$/.test(url)) { try { post('/public/dielman/hook', { url: url }); } catch (e) {} }
 }
 // Pairs with HQ the first time and remembers the key in this script's own storage.
 function key() {
@@ -607,15 +647,16 @@ function sendThreads(type, threads, label, phrase) {
 // Sends emails waiting in HQ (HQ decides how many per hour and per day).
 function sendQueued() {
   const left = MailApp.getRemainingDailyQuota();
-  if (left < 100) return;
+  if (left < 100) return 0;
   const r = UrlFetchApp.fetch(HQ + '/public/dielman/outbox?key=' + key() + '&max=' + Math.min(40, left - 100), { muteHttpExceptions: true });
-  if (r.getResponseCode() !== 200) return;
+  if (r.getResponseCode() !== 200) return 0;
   const done = [];
   (JSON.parse(r.getContentText()).items || []).forEach(function (it) {
     try { GmailApp.sendEmail(it.to, it.subject, it.text, { htmlBody: it.html, name: '${BIZ.name}' }); done.push({ id: it.id, ok: true }); }
     catch (e) { done.push({ id: it.id, ok: false, err: String(e) }); }
   });
   if (done.length) post('/public/dielman/sent', { done: done });
+  return done.filter(function (d) { return d.ok; }).length;
 }
 `;
 }
